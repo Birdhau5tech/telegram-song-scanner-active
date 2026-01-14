@@ -86,6 +86,26 @@ def evolution_webhook():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/v1/webhook/telegram", methods=["POST"])
+def telegram_webhook():
+    """Handle incoming Telegram webhook (POST JSON from Telegram)."""
+    try:
+        update = request.get_json()
+        logger.info("Received Telegram update")
+
+        db = SessionLocal()
+        try:
+            success = message_handler.handle_telegram_update(db, update)
+            if success:
+                return jsonify({"status": "success"}), 200
+            return jsonify({"status": "ignored"}), 200
+        finally:
+            db.close()
+    except (SQLAlchemyError, ValueError, KeyError, TypeError) as exc:
+        logger.exception("Telegram webhook error")
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/v1/requests/pending", methods=["GET"])
 def get_pending_requests():
     """Get pending song requests."""

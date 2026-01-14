@@ -215,6 +215,52 @@ class MessageHandler:
                 pass
             return False
 
+    def handle_telegram_update(self, db: Session, update: Dict) -> bool:
+        """Handle incoming Telegram webhook update.
+
+        Args:
+            db: Database session
+            update: Telegram update payload
+
+        Returns:
+            True if handled successfully
+        """
+        try:
+            message = update.get("message") or update.get("edited_message")
+            if not message:
+                logger.debug("Telegram update has no message")
+                return False
+
+            message_id = message.get("message_id")
+            chat = message.get("chat", {})
+            chat_id = str(chat.get("id"))
+
+            sender = message.get("from", {})
+            sender_id = sender.get("id")
+            sender_name = sender.get("username") or "{} {}".format(
+                sender.get("first_name", ""), sender.get("last_name", "")
+            ).strip()
+
+            # Extract text from the message
+            raw_text = message.get("text") or message.get("caption") or ""
+
+            # Timestamp (Telegram uses 'date' as int seconds)
+            ts = message.get("date")
+            timestamp = datetime.fromtimestamp(ts, tz=timezone.utc) if ts else datetime.now(timezone.utc)
+
+            return self.process_message(
+                db=db,
+                message_id=str(message_id),
+                chat_id=chat_id,
+                sender_number=str(sender_id),
+                sender_name=sender_name or str(sender_id),
+                raw_text=raw_text,
+                timestamp=timestamp,
+            )
+        except (RuntimeError, ValueError, KeyError, AttributeError) as exc:
+            logger.error("Error handling Telegram update: %s", exc)
+            return False
+
 
 # SINGLETON INSTANCE
 message_handler = MessageHandler()

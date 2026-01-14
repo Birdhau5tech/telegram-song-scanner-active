@@ -2,7 +2,7 @@
 
 ## ✅ COMPLETE STATUS
 
-Your WhatsApp Song Scanner is **production-ready**. All errors, warnings, and issues have been resolved.
+Your Telegram Song Scanner is **production-ready**. All errors, warnings, and issues have been resolved, we'll see about that
 
 ---
 

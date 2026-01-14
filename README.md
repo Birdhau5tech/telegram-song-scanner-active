@@ -1,10 +1,10 @@
 # 🎵 WhatsApp Song Scanner Bot → MariaDB → RadioDJ
 
-A production-ready system that scans WhatsApp chats for song requests, matches them to music databases using MusicBrainz and fuzzy matching, stores verified results in MariaDB, and integrates with RadioDJ for automated playlist management.
+A production-ready system that scans Telegram chats for song requests, matches them to music databases using MusicBrainz and fuzzy matching, stores verified results in MariaDB, and integrates with RadioDJ for automated playlist management.
 
 ## ✨ Features
 
-- **WhatsApp Integration**: Supports both Twilio WhatsApp API and Evolution API
+- **Telegram Integration**: 
 - **Intelligent Song Matching**: Uses MusicBrainz with fuzzy matching and confidence scoring
 - **Database Storage**: Complete MariaDB schema for tracking chats, messages, songs, and requests
 - **RadioDJ Integration**: Automated playlist addition via API or direct database access
@@ -94,6 +94,78 @@ MUSICBRAINZ_USER_AGENT=WhatsAppSongScanner/1.0.0
 # RadioDJ (optional)
 RADIODJ_API_URL=http://localhost:8080/radiodj
 RADIODJ_DB_PATH=/path/to/radiodj/database.sqlite
+
+### Telegram Integration (optional)
+
+This project can send live match notifications to a Telegram chat using a bot. To enable:
+
+1. Create a bot with BotFather in Telegram and copy the `BOT_TOKEN`.
+2. Obtain the chat id:
+  - Easiest: message your bot and ask `@userinfobot` for your chat id, or
+  - Send a message to the bot and call `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` and inspect `message.chat.id`.
+3. Add the following to your local `.env` (do NOT commit secrets):
+
+```dotenv
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+```
+
+4. Test the bot (from repo root, with venv active):
+
+```powershell
+# PowerShell
+python .\scripts\telegram\send_test.py "Test message from WhatsApp Song Scanner"
+```
+
+Or using PowerShell direct API call:
+
+```powershell
+$token = "<YOUR_TOKEN>"
+$chat  = "<YOUR_CHAT_ID>"
+Invoke-RestMethod -Uri "https://api.telegram.org/bot$token/sendMessage" -Method Post -Body @{ chat_id = $chat; text = "Test message from WhatsApp Song Scanner" }
+```
+
+5. Restart the application so it picks up environment changes. When a match/request is created the bot will forward a notification to the configured chat.
+
+Security note: never commit bot tokens or chat ids to source control. If a token is exposed, revoke it in BotFather and generate a new one.
+
+#### Webhook: secure `setWebhook` and handler
+
+To make Telegram deliver updates to your app via webhook and secure them with a secret token, run:
+
+```bash
+# Set webhook with a secret token that Telegram will include as a header
+curl -F "url=https://your-public-host/api/v1/webhook/telegram" \
+   -F "secret_token=MY_RANDOM_SECRET" \
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook
+```
+
+Telegram will include the secret in the header `X-Telegram-Bot-Api-Secret-Token` for each request. Example Flask handler snippet to validate it before processing:
+
+```python
+from flask import request, abort
+import os
+
+TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET')
+
+@app.route('/api/v1/webhook/telegram', methods=['POST'])
+def telegram_webhook():
+  # Validate secret header
+  secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
+  if TELEGRAM_WEBHOOK_SECRET and secret != TELEGRAM_WEBHOOK_SECRET:
+    abort(403)
+
+  update = request.get_json()
+  # forward to existing handler
+  db = SessionLocal()
+  try:
+    success = message_handler.handle_telegram_update(db, update)
+    return ("OK", 200) if success else ("IGNORED", 200)
+  finally:
+    db.close()
+```
+
+Add `TELEGRAM_WEBHOOK_SECRET` to your local `.env` (do not commit).
 ```
 
 ### WhatsApp Setup

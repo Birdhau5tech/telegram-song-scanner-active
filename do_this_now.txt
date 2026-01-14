@@ -1,0 +1,7 @@
+🎬 Next Steps for User
+Configure Environment: Edit .env with actual credentials
+Choose WhatsApp Provider: Set up either Twilio or Evolution API
+Deploy: Run docker-compose up -d
+Configure RadioDJ: Set up API or database connection
+Test: Send a WhatsApp message with a song request
+Monitor: Check health endpoint and logs

@@ -9,6 +9,7 @@ from src.music_matching.fuzzy_matcher import fuzzy_matcher
 from src.music_matching.musicbrainz_client import musicbrainz_client
 from src.music_matching.song_validator import song_validator
 from src.utils.logger import get_logger
+from src.telegram.client import telegram_client
 
 logger = get_logger(__name__)
 
@@ -136,6 +137,26 @@ class MatchingOrchestrator:
             RequestOperations.approve_request(db, request_id_int)
 
         logger.info("Created request %s for: %s", request_id_int, match_result["title"])
+
+        # Send Telegram notification if configured
+        try:
+            if telegram_client.is_configured():
+                title = match_result.get("title")
+                artist = match_result.get("artist") or "Unknown"
+                confidence = match_result.get("confidence")
+                verified = match_result.get("is_verified")
+                msg = (
+                    f"New song request (ID: {request_id_int})\n"
+                    f"Title: {title}\n"
+                    f"Artist: {artist}\n"
+                    f"Confidence: {confidence:.2f}\n"
+                    f"Verified: {verified}\n"
+                    f"Requested by: {requested_by}\n"
+                    f"Chat: {chat_id}"
+                )
+                telegram_client.send_message(msg)
+        except Exception:
+            logger.debug("Telegram notification failed, continuing")
 
         return request_id_int
 

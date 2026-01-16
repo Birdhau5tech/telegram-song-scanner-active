@@ -4,13 +4,73 @@ A production-ready system that scans Telegram chats for song requests, matches t
 
 ## ✨ Features
 
-- **Telegram Integration**: 
+- **Telegram Song Matching Bot**: Send song requests in your Telegram group and get instant matches from MusicBrainz
 - **Intelligent Song Matching**: Uses MusicBrainz with fuzzy matching and confidence scoring
 - **Database Storage**: Complete MariaDB schema for tracking chats, messages, songs, and requests
 - **RadioDJ Integration**: Automated playlist addition via API or direct database access
 - **Modular Architecture**: Clean separation of concerns for easy maintenance
 - **Production Ready**: Docker deployment, monitoring, logging, and health checks
 - **Scalable Design**: Supports multiple chats and concurrent processing
+
+## 🤖 Telegram Song Matching (Quick Start)
+
+The easiest way to use this project is via the Telegram bot. Send song requests in your group and get instant matches!
+
+### Setup
+
+1. **Create a Telegram bot** via [@BotFather](https://t.me/BotFather)
+2. **Add your bot** to a Telegram group
+3. **Configure `.env`**:
+   ```ini
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   TELEGRAM_CHAT_ID=your_group_chat_id_here
+   ```
+
+4. **Start the bot**:
+   ```powershell
+   cd whatsapp-song-scanner
+   .\.venv\Scripts\Activate.ps1
+   python src/telegram_bot.py
+   ```
+
+### Usage
+
+Send messages in your Telegram group like:
+
+```
+Play Bohemian Rhapsody by Queen
+```
+```
+I want to hear Blinding Lights by The Weeknd
+```
+```
+Can you play Hoe Cakes by MF Doom
+```
+
+The bot will reply with:
+
+```
+🎵 Song Match Found!
+
+Bohemian Rhapsody
+👤 Artist: Queen
+✅ Confidence: 100%
+🔗 MusicBrainz
+```
+
+### How It Works
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   Telegram      │───▶│  Message Parser  │───▶│  MusicBrainz     │
+│   Group Chat    │    │  (extract song)  │    │  Search          │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+                                                        │
+┌─────────────────┐    ┌──────────────────┐    ┌───────▼──────────┐
+│   Bot Reply     │◀───│  Format Response │◀───│  Fuzzy Matcher   │
+│   with Match    │    │                  │    │  (best match)    │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+```
 
 ## 🚀 Quick Start
 

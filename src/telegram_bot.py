@@ -1,0 +1,290 @@
+"""Telegram bot that polls for messages and matches songs."""
+import os
+import sys
+import requests
+import time
+import logging
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from src.text_processing.message_parser import message_parser
+from src.music_matching.musicbrainz_client import musicbrainz_client
+from src.music_matching.fuzzy_matcher import fuzzy_matcher
+from src.playlist_parser import playlist_parser
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+def get_updates(offset=None):
+    """Get new messages from Telegram."""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+    params = {"timeout": 30}
+    if offset:
+        params["offset"] = offset
+    try:
+        response = requests.get(url, params=params, timeout=35)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error getting updates: {e}")
+        return {"result": []}
+
+
+def send_message(chat_id, text, parse_mode="HTML"):
+    """Send a message to a Telegram chat."""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    try:
+        response = requests.post(url, json={
+            "chat_id": chat_id, 
+            "text": text,
+            "parse_mode": parse_mode
+        })
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
+        return None
+
+
+def process_song_request(text):
+    """Parse message and match songs."""
+    # Extract song candidates from message
+    candidates = message_parser.parse(text)
+    
+    if not candidates:
+        return None
+    
+    results = []
+    for candidate in candidates:
+        title = candidate.get('title')
+        artist = candidate.get('artist')
+        
+        # Search MusicBrainz
+        mb_results = musicbrainz_client.search_song(title, artist)
+        
+        if mb_results:
+            # Get best match
+            best_match, confidence = fuzzy_matcher.get_best_match(title, artist, mb_results)
+            
+            if best_match and confidence >= 75:
+                artist_name = "Unknown"
+                if best_match.get('artist_credits'):
+                    artist_name = best_match['artist_credits'][0].get('name', 'Unknown')
+                
+                results.append({
+                    'title': best_match.get('title'),
+                    'artist': artist_name,
+                    'confidence': confidence,
+                    'musicbrainz_id': best_match.get('musicbrainz_id')
+                })
+        
+        # Rate limit for MusicBrainz
+        time.sleep(1)
+    
+    return results
+
+
+def process_playlist(text, chat_id):
+    """Check if message contains a playlist link and process it."""
+    playlist_info = playlist_parser.detect_playlist_url(text)
+    
+    if not playlist_info:
+        return None
+    
+    platform = playlist_info['platform']
+    playlist_id = playlist_info['playlist_id']
+    
+    logger.info(f"🎧 Detected {platform} playlist: {playlist_id}")
+    
+    # Send "processing" message
+    send_message(chat_id, f"🎧 <b>Scanning {platform.replace('_', ' ').title()} playlist...</b>\n\nThis may take a moment.", "HTML")
+    
+    # Get tracks from playlist
+    tracks = playlist_parser.get_playlist_tracks(platform, playlist_id)
+    
+    if not tracks:
+        return {
+            'error': True,
+            'message': f"❌ Couldn't fetch playlist. Make sure:\n• The playlist is public\n• Spotify credentials are set in .env\n\nSupported: Spotify playlists & albums"
+        }
+    
+    logger.info(f"📋 Found {len(tracks)} tracks in playlist")
+    
+    # Match each track via MusicBrainz
+    matches = []
+    for i, track in enumerate(tracks[:50]):  # Limit to 50 tracks
+        title = track.get('title')
+        artist = track.get('artist')
+        
+        if not title:
+            continue
+        
+        # Search MusicBrainz
+        mb_results = musicbrainz_client.search_song(title, artist)
+        
+        if mb_results:
+            best_match, confidence = fuzzy_matcher.get_best_match(title, artist, mb_results)
+            
+            if best_match and confidence >= 70:
+                artist_name = "Unknown"
+                if best_match.get('artist_credits'):
+                    artist_name = best_match['artist_credits'][0].get('name', 'Unknown')
+                
+                matches.append({
+                    'original_title': title,
+                    'original_artist': artist,
+                    'matched_title': best_match.get('title'),
+                    'matched_artist': artist_name,
+                    'confidence': confidence,
+                    'musicbrainz_id': best_match.get('musicbrainz_id')
+                })
+            else:
+                matches.append({
+                    'original_title': title,
+                    'original_artist': artist,
+                    'matched_title': None,
+                    'matched_artist': None,
+                    'confidence': 0,
+                    'musicbrainz_id': None
+                })
+        else:
+            matches.append({
+                'original_title': title,
+                'original_artist': artist,
+                'matched_title': None,
+                'matched_artist': None,
+                'confidence': 0,
+                'musicbrainz_id': None
+            })
+        
+        # Rate limit for MusicBrainz (1 request per second)
+        time.sleep(1.1)
+        
+        # Send progress update every 10 tracks
+        if (i + 1) % 10 == 0:
+            logger.info(f"  Progress: {i + 1}/{min(len(tracks), 50)} tracks processed")
+    
+    return {
+        'error': False,
+        'total_tracks': len(tracks),
+        'processed_tracks': len(matches),
+        'matches': matches
+    }
+
+
+def format_playlist_response(result):
+    """Format playlist matches as a nice message."""
+    if result.get('error'):
+        return result.get('message')
+    
+    matches = result.get('matches', [])
+    matched = [m for m in matches if m.get('matched_title')]
+    unmatched = [m for m in matches if not m.get('matched_title')]
+    
+    response = f"🎧 <b>Playlist Scan Complete!</b>\n\n"
+    response += f"📊 <b>Results:</b>\n"
+    response += f"• Total tracks: {result.get('total_tracks', 0)}\n"
+    response += f"• Processed: {result.get('processed_tracks', 0)}\n"
+    response += f"• ✅ Matched: {len(matched)}\n"
+    response += f"• ❌ Not found: {len(unmatched)}\n\n"
+    
+    if matched:
+        response += f"<b>✅ Matched Songs ({len(matched)}):</b>\n"
+        for i, m in enumerate(matched[:20], 1):  # Show first 20
+            response += f"{i}. <b>{m['matched_title']}</b> - {m['matched_artist']} ({m['confidence']:.0f}%)\n"
+        
+        if len(matched) > 20:
+            response += f"<i>...and {len(matched) - 20} more</i>\n"
+    
+    if unmatched:
+        response += f"\n<b>❌ Not Found ({len(unmatched)}):</b>\n"
+        for i, m in enumerate(unmatched[:10], 1):  # Show first 10
+            response += f"• {m['original_title']} - {m['original_artist'] or 'Unknown'}\n"
+        
+        if len(unmatched) > 10:
+            response += f"<i>...and {len(unmatched) - 10} more</i>\n"
+    
+    return response
+
+
+def format_response(results):
+    """Format song matches as a nice message."""
+    if not results:
+        return None
+    
+    response = "🎵 <b>Song Match Found!</b>\n\n"
+    
+    for i, match in enumerate(results, 1):
+        response += f"<b>{match['title']}</b>\n"
+        response += f"👤 Artist: {match['artist']}\n"
+        response += f"✅ Confidence: {match['confidence']:.0f}%\n"
+        if match.get('musicbrainz_id'):
+            response += f"🔗 <a href='https://musicbrainz.org/recording/{match['musicbrainz_id']}'>MusicBrainz</a>\n"
+        response += "\n"
+    
+    return response
+
+
+def main():
+    """Poll Telegram for messages and match songs."""
+    logger.info("🤖 Telegram bot started!")
+    logger.info("Listening for song requests in your group...")
+    logger.info("Send messages like:")
+    logger.info("  - 'Play Bohemian Rhapsody by Queen'")
+    logger.info("  - 'I want to hear Blinding Lights by The Weeknd'")
+    logger.info("  - 'Can you play Bad Guy by Billie Eilish'")
+    logger.info("  - Or paste a Spotify playlist/album link!")
+    logger.info("-" * 50)
+    
+    offset = None
+    while True:
+        updates = get_updates(offset)
+        for update in updates.get("result", []):
+            offset = update["update_id"] + 1
+            
+            if "message" in update:
+                text = update["message"].get("text", "")
+                chat = update["message"].get("chat", {})
+                chat_id = chat.get("id")
+                user = update["message"].get("from", {})
+                username = user.get("first_name", "Unknown")
+                
+                if not text:
+                    continue
+                
+                logger.info(f"📩 Message from {username}: {text}")
+                
+                # Check for playlist links first
+                playlist_info = playlist_parser.detect_playlist_url(text)
+                if playlist_info:
+                    logger.info(f"🎧 Processing {playlist_info['platform']} playlist...")
+                    result = process_playlist(text, chat_id)
+                    if result:
+                        response = format_playlist_response(result)
+                        send_message(chat_id, response)
+                        matched_count = len([m for m in result.get('matches', []) if m.get('matched_title')])
+                        logger.info(f"✅ Playlist processed: {matched_count} matches")
+                    continue
+                
+                # Process the message for song requests
+                results = process_song_request(text)
+                
+                if results:
+                    # Send reply with matches
+                    response = format_response(results)
+                    send_message(chat_id, response)
+                    logger.info(f"✅ Replied with {len(results)} match(es)")
+                else:
+                    logger.info("No song requests detected")
+        
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()

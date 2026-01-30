@@ -5,6 +5,7 @@ A production-ready system that scans Telegram chats for song requests, matches t
 ## ✨ Features
 
 - **Telegram Song Matching Bot**: Send song requests in your Telegram group and get instant matches from MusicBrainz
+
 - **Intelligent Song Matching**: Uses MusicBrainz with fuzzy matching and confidence scoring
 - **Database Storage**: Complete MariaDB schema for tracking chats, messages, songs, and requests
 - **RadioDJ Integration**: Automated playlist addition via API or direct database access

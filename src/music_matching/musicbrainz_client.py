@@ -59,17 +59,23 @@ class MusicBrainzClient:
         self.rate_limiter.wait()
 
         try:
-            # CONSTRUCT SEARCH QUERY
+            # CONSTRUCT SEARCH QUERY - Try exact match first
             query_parts = [f'recording:"{song_title}"']
             if artist_name:
                 query_parts.append(f'artist:"{artist_name}"')
 
             search_query = " AND ".join(query_parts)
-
             logger.info("Searching MusicBrainz: %s", search_query)
 
             # PERFORM SEARCH WITH RETRY LOGIC
             result = self._search_with_retry(search_query)
+
+            # If no results with exact artist match, try broader search
+            if not result.get("recording-list") and artist_name:
+                logger.info("No results with exact artist match, trying broader search")
+                search_query = f'recording:"{song_title}"'
+                logger.info("Searching MusicBrainz: %s", search_query)
+                result = self._search_with_retry(search_query)
 
             # PROCESS AND FORMAT RESULTS
             formatted_results = self._format_search_results(result)

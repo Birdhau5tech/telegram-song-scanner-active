@@ -11,6 +11,7 @@ from src.text_processing.message_parser import message_parser
 from src.text_processing.text_cleaner import text_cleaner
 from src.utils.logger import get_logger
 from src.whatsapp.client import whatsapp_client
+from src.playlist_parser import playlist_parser
 
 logger = get_logger(__name__)
 
@@ -169,6 +170,38 @@ class MessageHandler:
 
             # STEP 4: Parse for song requests
             candidates = self.parser.parse(cleaned_text)
+
+            # STEP 4a: Detect and expand playlists (e.g., Spotify links)
+            try:
+                playlist_info = playlist_parser.detect_playlist_url(cleaned_text)
+                if playlist_info:
+                    platform = playlist_info.get("platform")
+                    playlist_id = playlist_info.get("playlist_id")
+                    tracks = playlist_parser.get_playlist_tracks(platform, playlist_id)
+                    max_tracks = 25  # avoid flooding
+                    for t in tracks[:max_tracks]:
+                        title = t.get("title")
+                        artist = t.get("artist")
+                        if not title:
+                            continue
+                        candidates.append(
+                            {
+                                "title": title,
+                                "artist": artist,
+                                "original_phrase": f"{title} - {artist}" if artist else title,
+                                "extraction_method": f"playlist_{platform}",
+                                "confidence": 98.0,
+                            }
+                        )
+                    if tracks:
+                        logger.info(
+                            "Expanded playlist into %s tracks (platform=%s)",
+                            min(len(tracks), max_tracks),
+                            platform,
+                        )
+            except Exception as exc:
+                logger.warning("Playlist parsing failed: %s", exc)
+
             if not candidates:
                 logger.debug("No song candidates found in message %s", message_id)
                 MessageOperations.mark_processed(db, message_id_int, cleaned_text)

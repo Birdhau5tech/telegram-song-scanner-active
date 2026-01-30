@@ -30,7 +30,7 @@ MUSIC_MATCHING_CONFIG = {
         'cache_duration_hours': int(os.getenv('MUSICBRAINZ_CACHE_HOURS', '168')),  # 7 days
     },
     'fuzzy_matching': {
-        'min_match_score': int(os.getenv('MIN_MATCH_SCORE', '85')),
+        'min_match_score': int(os.getenv('MIN_MATCH_SCORE', '80')),
         'max_candidates': int(os.getenv('MAX_CANDIDATES', '5')),
     },
     'fallback_apis': {

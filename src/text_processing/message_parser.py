@@ -52,8 +52,27 @@ class MessageParser:
             ),
             # "Artist - Song"
             (
-                re.compile(r'^(?P<artist>[^-]+)\s*-\s*(?P<title>[^"\'.]+)$', re.IGNORECASE),
+                re.compile(
+                    r'^(?P<artist>[^-]+)\s*-\s*(?P<title>[^"\'.]+)$',
+                    re.IGNORECASE | re.MULTILINE,
+                ),
                 "simple_dash",
+            ),
+            # "Song - Artist" per-line
+            (
+                re.compile(
+                    r'^(?P<title>[^-]+?)\s*-\s*(?P<artist>[^"\'.]+)$',
+                    re.IGNORECASE | re.MULTILINE,
+                ),
+                "simple_dash_reverse",
+            ),
+            # "Song by Artist" (without keywords)
+            (
+                re.compile(
+                    r'(?P<title>[^"\']+?)\s+by\s+(?P<artist>[^"\'.]+)',
+                    re.IGNORECASE,
+                ),
+                "title_by_artist",
             ),
             # Quoted song title
             (re.compile(r'["\'](?P<title>[^"\']{3,})["\']', re.IGNORECASE), "quoted"),
@@ -73,23 +92,34 @@ class MessageParser:
 
         candidates = []
 
+        seen = set()
+
         for pattern, method_name in self.patterns:
-            match = pattern.search(text)
-            if match:
+            for match in pattern.finditer(text):
                 groups = match.groupdict()
 
+                title = groups.get("title", "").strip() if groups.get("title") else None
+                artist = groups.get("artist", "").strip() if groups.get("artist") else None
+
+                # Only add if we have at least a title
+                if not title:
+                    continue
+
+                dedupe_key = (title.lower(), (artist or "").lower())
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+
                 candidate = {
-                    "title": groups.get("title", "").strip() if groups.get("title") else None,
-                    "artist": groups.get("artist", "").strip() if groups.get("artist") else None,
+                    "title": title,
+                    "artist": artist,
                     "original_phrase": match.group(0),
                     "extraction_method": method_name,
                     "confidence": self._calculate_confidence(method_name, groups),
                 }
 
-                # Only add if we have at least a title
-                if candidate["title"]:
-                    candidates.append(candidate)
-                    logger.debug("Extracted candidate: %s", candidate)
+                candidates.append(candidate)
+                logger.debug("Extracted candidate: %s", candidate)
 
         return candidates
 
@@ -110,6 +140,7 @@ class MessageParser:
             "want_to_hear": 90,
             "simple_dash": 80,
             "song_question": 75,
+            "title_by_artist": 85,  # High confidence for explicit "by" format
             "quoted": 70,
         }
 

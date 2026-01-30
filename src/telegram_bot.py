@@ -4,6 +4,8 @@ import sys
 import requests
 import time
 import logging
+import uuid
+from datetime import datetime, timezone
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,11 +18,77 @@ from src.music_matching.musicbrainz_client import musicbrainz_client
 from src.music_matching.fuzzy_matcher import fuzzy_matcher
 from src.playlist_parser import playlist_parser
 
+# Database imports
+from config.database import SessionLocal
+from src.database.operations import ChatOperations, MessageOperations, SongOperations, RequestOperations
+
+# RadioDJ integration
+from src.integrations.radiodj_handler import send_to_radiodj, check_radiodj_library
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+def save_to_database(chat_id, username, raw_text, results):
+    """Save song match to database."""
+    db = SessionLocal()
+    try:
+        # Create or update chat record
+        ChatOperations.create_or_update_chat(db, str(chat_id), f"Telegram: {chat_id}")
+        
+        # Create message record
+        message_id = f"tg_{chat_id}_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        message = MessageOperations.create_message(
+            db,
+            message_id=message_id,
+            chat_id=str(chat_id),
+            sender_number=username,
+            sender_name=username,
+            raw_text=raw_text,
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        # Save each match
+        for result in results:
+            # Create extraction record
+            extraction = SongOperations.create_extraction(
+                db,
+                message_id=message.id,
+                original_phrase=raw_text,
+                confidence_score=result.get('confidence', 0) / 100.0,
+                extraction_method="telegram_bot"
+            )
+            
+            # Create match record
+            match = SongOperations.create_match(
+                db,
+                extraction_id=extraction.id,
+                song_title=result.get('title', ''),
+                artist_name=result.get('artist'),
+                musicbrainz_id=result.get('musicbrainz_id'),
+                match_confidence=result.get('confidence', 0) / 100.0,
+                match_source="musicbrainz",
+                match_metadata={'raw_result': result}
+            )
+            
+            # Create song request
+            RequestOperations.create_request(
+                db,
+                chat_id=str(chat_id),
+                matched_song_id=match.id,
+                requested_by=username
+            )
+        
+        logger.info(f"💾 Saved {len(results)} match(es) to database")
+        return True
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        return False
+    finally:
+        db.close()
 
 
 def get_updates(offset=None):
@@ -213,7 +281,7 @@ def format_playlist_response(result):
     return response
 
 
-def format_response(results):
+def format_response(results, radiodj_queued=None):
     """Format song matches as a nice message."""
     if not results:
         return None
@@ -226,6 +294,13 @@ def format_response(results):
         response += f"✅ Confidence: {match['confidence']:.0f}%\n"
         if match.get('musicbrainz_id'):
             response += f"🔗 <a href='https://musicbrainz.org/recording/{match['musicbrainz_id']}'>MusicBrainz</a>\n"
+        
+        # Check if queued to RadioDJ
+        if radiodj_queued and match in radiodj_queued:
+            response += f"📻 <b>Queued to RadioDJ!</b>\n"
+        elif radiodj_queued is not None:
+            response += f"⚠️ Not found in RadioDJ library\n"
+        
         response += "\n"
     
     return response
@@ -276,12 +351,24 @@ def main():
                 results = process_song_request(text)
                 
                 if results:
-                    # Send reply with matches
-                    response = format_response(results)
+                    # Save to database
+                    save_to_database(chat_id, username, text, results)
+                    
+                    # Try to queue in RadioDJ
+                    radiodj_queued = []
+                    for result in results:
+                        track = send_to_radiodj(result)
+                        if track:
+                            radiodj_queued.append(result)
+                    
+                    # Send reply with matches and RadioDJ status
+                    response = format_response(results, radiodj_queued)
                     send_message(chat_id, response)
-                    logger.info(f"✅ Replied with {len(results)} match(es)")
+                    logger.info(f"✅ Replied with {len(results)} match(es), {len(radiodj_queued)} queued to RadioDJ")
                 else:
-                    logger.info("No song requests detected")
+                    # No song match found - acknowledge the message
+                    send_message(chat_id, "👋 Hey! I'm listening.\n\nTo request a song, say:\n• <i>Play [Song] by [Artist]</i>\n• Or paste a Spotify playlist link!")
+                    logger.info(f"💬 Acknowledged message: {text[:50]}")
         
         time.sleep(1)
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from src.database.operations import RequestOperations, SongOperations
 from src.music_matching.fuzzy_matcher import fuzzy_matcher
 from src.music_matching.musicbrainz_client import musicbrainz_client
+from src.music_matching.jamendo_client import jamendo_client
 from src.music_matching.song_validator import song_validator
 from src.utils.logger import get_logger
 from src.telegram.client import telegram_client
@@ -20,6 +21,7 @@ class MatchingOrchestrator:
     def __init__(self):
         """Initialize matching orchestrator."""
         self.musicbrainz = musicbrainz_client
+        self.jamendo = jamendo_client
         self.fuzzy = fuzzy_matcher
         self.validator = song_validator
 
@@ -42,54 +44,77 @@ class MatchingOrchestrator:
         # STEP 1: Search MusicBrainz
         candidates = self.musicbrainz.search_song(title, artist)
 
-        if not candidates:
-            logger.warning("No candidates found for: %s", title)
-            return None
+        if candidates:
+            logger.info("Found %s MusicBrainz candidates", len(candidates))
+            best_match, confidence = self.fuzzy.get_best_match(title, artist, candidates)
+            if best_match:
+                is_valid, reason = self.validator.validate(best_match, confidence)
+                if is_valid:
+                    artist_name = None
+                    if best_match.get("artist_credits"):
+                        artist_name = best_match["artist_credits"][0].get("name")
 
-        logger.info("Found %s candidates", len(candidates))
+                    matched_song = SongOperations.create_match(
+                        db=db,
+                        extraction_id=extraction_id,
+                        song_title=best_match["title"],
+                        artist_name=artist_name,
+                        musicbrainz_id=best_match.get("musicbrainz_id"),
+                        match_confidence=confidence,
+                        match_source="musicbrainz",
+                        match_metadata=best_match,
+                    )
+                else:
+                    logger.warning("MusicBrainz match rejected: %s", reason)
+                    matched_song = None
+            else:
+                logger.warning("No suitable MusicBrainz match for: %s", title)
+                matched_song = None
+        else:
+            logger.warning("No MusicBrainz candidates for: %s", title)
+            matched_song = None
 
-        # STEP 2: Rank and get best match
-        best_match, confidence = self.fuzzy.get_best_match(title, artist, candidates)
+        # STEP 2: Fallback to Jamendo if no matched song
+        if matched_song is None:
+            jamendo_candidates = self.jamendo.search_song(title, artist)
+            if not jamendo_candidates:
+                logger.warning("Jamendo returned no candidates for: %s", title)
+                return None
 
-        if not best_match:
-            logger.warning("No suitable match found for: %s", title)
-            return None
+            logger.info("Found %s Jamendo candidates", len(jamendo_candidates))
+            best_match, confidence = self.fuzzy.get_best_match(title, artist, jamendo_candidates)
+            if not best_match:
+                logger.warning("No suitable Jamendo match for: %s", title)
+                return None
 
-        # STEP 3: Validate match
-        is_valid, reason = self.validator.validate(best_match, confidence)
+            # Minimal validation reuse
+            is_valid, reason = self.validator.validate(best_match, confidence)
+            if not is_valid:
+                logger.warning("Jamendo match rejected: %s", reason)
+                return None
 
-        if not is_valid:
-            logger.warning("Match validation failed: %s", reason)
-            return None
-
-        # STEP 4: Store match in database
-        artist_name = None
-        if best_match.get("artist_credits"):
-            artist_name = best_match["artist_credits"][0].get("name")
-
-        matched_song = SongOperations.create_match(
-            db=db,
-            extraction_id=extraction_id,
-            song_title=best_match["title"],
-            artist_name=artist_name,
-            musicbrainz_id=best_match.get("musicbrainz_id"),
-            match_confidence=confidence,
-            match_source="musicbrainz",
-            match_metadata=best_match,
-        )
+            matched_song = SongOperations.create_match(
+                db=db,
+                extraction_id=extraction_id,
+                song_title=best_match.get("title"),
+                artist_name=best_match.get("artist"),
+                match_confidence=confidence,
+                match_source="jamendo",
+                match_metadata=best_match,
+            )
 
         # STEP 5: Check if should auto-approve
         if self.validator.should_auto_approve(best_match, confidence):
             SongOperations.verify_match(db, cast(int, matched_song.id), "auto_approve")
             logger.info("Match auto-approved: %s", best_match["title"])
 
-        logger.info("Successfully matched: %s (confidence=%.2f)", best_match["title"], confidence)
+        logger.info("Successfully matched: %s (confidence=%.2f)", matched_song.song_title, matched_song.match_confidence)
 
         return {
             "matched_song_id": matched_song.id,
-            "title": best_match["title"],
-            "artist": artist_name,
-            "confidence": confidence,
+            "title": matched_song.song_title,
+            "artist": matched_song.artist_name,
+            "confidence": matched_song.match_confidence,
             "is_verified": self.validator.should_auto_approve(best_match, confidence),
         }
 

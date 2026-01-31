@@ -1,5 +1,5 @@
 #!/bin/bash
-# Configure environment for WhatsApp Song Scanner
+# Configure environment for Song Scanner
 
 set -e
 
@@ -19,10 +19,9 @@ echo "✅ Environment configuration created!"
 echo ""
 echo "Important: Edit .env file and configure the following:"
 echo ""
-echo "  1. WhatsApp Provider Settings:"
-echo "     - Choose 'twilio' or 'evolution' as WHATSAPP_PROVIDER"
-echo "     - For Twilio: Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER"
-echo "     - For Evolution: Set EVOLUTION_API_URL and EVOLUTION_API_KEY"
+echo "  1. Telegram Settings:"
+echo "     - Set TELEGRAM_BOT_TOKEN"
+echo "     - Set TELEGRAM_CHAT_ID (for outbound notifications)"
 echo ""
 echo "  2. Database Settings:"
 echo "     - Set MARIADB_PASSWORD (required)"

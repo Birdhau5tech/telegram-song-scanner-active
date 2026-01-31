@@ -1,4 +1,4 @@
-"""Command-line interface for WhatsApp Song Scanner."""
+"""Command-line interface for the Song Scanner."""
 
 import click
 
@@ -8,7 +8,6 @@ from src.database.models import SongRequest
 from src.database.operations import ChatOperations, RequestOperations
 from src.radiodj_integration.sync_service import sync_service
 from src.utils.logger import get_logger
-from src.whatsapp.chat_scanner import chat_scanner
 
 logger = get_logger(__name__)
 
@@ -16,41 +15,7 @@ logger = get_logger(__name__)
 @click.group()
 @click.version_option(version="1.0.0")
 def cli():
-    """WhatsApp Song Scanner CLI - Manage song requests from WhatsApp to RadioDJ."""
-
-
-@cli.command()
-@click.option(
-    "--chat-id",
-    required=False,
-    help="Specific chat ID to scan (optional)",
-)
-def scan(chat_id):
-    """Scan WhatsApp chats for song requests.
-
-    Examples:
-        python -m src.cli scan                    # Scan all active chats
-        python -m src.cli scan --chat-id=<id>    # Scan specific chat
-    """
-    db = SessionLocal()
-    try:
-        if chat_id:
-            click.echo(f"Scanning chat: {chat_id}")
-            results = chat_scanner.scan_chat(db, chat_id)
-            click.echo(f"✓ Scan completed: {results} messages processed")
-        else:
-            click.echo("Scanning all active chats...")
-            results = chat_scanner.scan_all_active_chats(db)
-            total = sum(results.values())
-            click.echo(f"✓ Scan completed: {total} total messages processed")
-            for chat_name, count in results.items():
-                click.echo(f"  - {chat_name}: {count} messages")
-        state_manager.update_last_scan()
-    except (RuntimeError, ValueError, OSError, KeyError, AttributeError) as e:
-        click.echo(f"✗ Error during scan: {e}", err=True)
-        logger.error("Scan error: %s", e)
-    finally:
-        db.close()
+    """Song Scanner CLI - Manage song requests to RadioDJ."""
 
 
 @cli.command()
@@ -93,7 +58,7 @@ def status():
     uptime = state_manager.get_uptime_seconds()
 
     click.echo("\n" + "=" * 50)
-    click.echo("WhatsApp Song Scanner Status")
+    click.echo("Song Scanner Status")
     click.echo("=" * 50)
     click.echo(f"Status: {state.get('status', 'unknown')}")
     click.echo(f"Uptime: {uptime:.0f} seconds")
@@ -109,7 +74,7 @@ def status():
 
 @cli.command()
 def list_chats():
-    """List all active WhatsApp chats.
+    """List all active chats.
 
     Examples:
         python -m src.cli list-chats

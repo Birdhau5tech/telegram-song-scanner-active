@@ -1,1 +1,0 @@
-"""WhatsApp integration package initialization."""

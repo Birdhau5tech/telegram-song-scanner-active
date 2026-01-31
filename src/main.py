@@ -14,7 +14,7 @@ from src.core.state_manager import state_manager
 from src.database.models import init_database
 from src.database.operations import RequestOperations
 from src.utils.logger import get_logger
-from src.whatsapp.message_handler import message_handler
+from src.message_handler import message_handler
 
 logger = get_logger(__name__)
 
@@ -43,46 +43,6 @@ def get_metrics():
         return jsonify(metrics), 200
     except (KeyError, ValueError, TypeError) as exc:
         logger.exception("Metrics error")
-        return jsonify({"error": str(exc)}), 500
-
-
-@app.route("/api/v1/webhook/twilio", methods=["POST"])
-def twilio_webhook():
-    """Handle incoming Twilio webhook."""
-    try:
-        webhook_data = request.form.to_dict()
-        logger.info("Received Twilio webhook: %s", webhook_data.get("From"))
-
-        db = SessionLocal()
-        try:
-            success = message_handler.handle_twilio_webhook(db, webhook_data)
-            if success:
-                return jsonify({"status": "success"}), 200
-            return jsonify({"status": "error"}), 500
-        finally:
-            db.close()
-    except (SQLAlchemyError, ValueError, KeyError, TypeError) as exc:
-        logger.exception("Webhook error")
-        return jsonify({"error": str(exc)}), 500
-
-
-@app.route("/api/v1/webhook/evolution", methods=["POST"])
-def evolution_webhook():
-    """Handle incoming Evolution API webhook."""
-    try:
-        message_data = request.get_json()
-        logger.info("Received Evolution webhook")
-
-        db = SessionLocal()
-        try:
-            success = message_handler.handle_evolution_message(db, message_data)
-            if success:
-                return jsonify({"status": "success"}), 200
-            return jsonify({"status": "error"}), 500
-        finally:
-            db.close()
-    except (SQLAlchemyError, ValueError, KeyError, TypeError) as exc:
-        logger.exception("Webhook error")
         return jsonify({"error": str(exc)}), 500
 
 
@@ -204,7 +164,7 @@ def scan_status():
 
 def initialize_app():
     """Initialize application."""
-    logger.info("Initializing WhatsApp Song Scanner...")
+    logger.info("Initializing Song Scanner...")
 
     try:
         init_database()

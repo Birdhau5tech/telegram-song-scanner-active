@@ -50,43 +50,23 @@ class TestScanStatusEndpoint:
 class TestWebhookEndpoint:
     """Test webhook endpoints."""
 
-    @patch("src.whatsapp.message_handler.MessageHandler.handle_twilio_webhook")
-    def test_twilio_webhook(self, mock_handle, client):
-        """Test Twilio webhook endpoint."""
+    @patch("src.message_handler.MessageHandler.handle_telegram_update")
+    def test_telegram_webhook(self, mock_handle, client):
+        """Test Telegram webhook endpoint."""
         mock_handle.return_value = True
 
         payload = {
-            "MessageSid": "test-sid-123",
-            "From": "+1234567890",
-            "Body": "test message",
-            "AccountSid": "test-account",
-        }
-
-        response = client.post(
-            "/api/v1/webhook/twilio", data=payload, follow_redirects=True
-        )
-        assert response.status_code == 200
-
-    @patch("src.whatsapp.message_handler.MessageHandler.handle_evolution_message")
-    def test_evolution_webhook(self, mock_handle, client):
-        """Test Evolution API webhook endpoint."""
-        mock_handle.return_value = True
-
-        payload = {
-            "data": {
-                "message": {
-                    "key": {"id": "test-msg-123"},
-                    "body": "test message",
-                    "fromMe": False,
-                    "pushName": "Test User",
-                }
+            "message": {
+                "message_id": 1,
+                "date": 1700000000,
+                "chat": {"id": 123, "type": "private"},
+                "from": {"id": 456, "username": "tester"},
+                "text": "test message",
             }
         }
 
         response = client.post(
-            "/api/v1/webhook/evolution",
-            json=payload,
-            follow_redirects=True,
+            "/api/v1/webhook/telegram", json=payload, follow_redirects=True
         )
         assert response.status_code == 200
 

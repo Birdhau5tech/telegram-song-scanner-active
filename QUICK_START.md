@@ -124,7 +124,48 @@ curl -X POST http://localhost:5000/api/v1/requests/approve \
 
 ---
 
-## 🐛 Quick Troubleshooting
+## �️ Local Development (Without Docker)
+
+### **Start Telegram Bot**
+```powershell
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Set Python path and start bot (with logging)
+$env:PYTHONPATH = "."
+Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "src/telegram_bot.py" -RedirectStandardOutput "bot_out.log" -RedirectStandardError "bot_err.log" -NoNewWindow
+
+# Or run in foreground (see output directly)
+$env:PYTHONPATH = "."; .\.venv\Scripts\python.exe src/telegram_bot.py
+```
+
+### **Start Flask API Server**
+```powershell
+$env:PYTHONPATH = "."; .\.venv\Scripts\python.exe src/main.py
+```
+
+### **Monitor Bot Logs**
+```powershell
+# Watch error log in real-time
+Get-Content bot_err.log -Tail 20 -Wait
+
+# View recent output
+Get-Content bot_out.log -Tail 30
+```
+
+### **Check if Bot is Running**
+```powershell
+Get-Process python -ErrorAction SilentlyContinue | Select-Object Id, ProcessName
+```
+
+### **Stop All Python Processes**
+```powershell
+Stop-Process -Name python -Force -ErrorAction SilentlyContinue
+```
+
+---
+
+## �🐛 Quick Troubleshooting
 
 ### **Dashboard won't load**
 ```bash

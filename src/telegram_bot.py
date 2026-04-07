@@ -11,19 +11,22 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 from src.text_processing.message_parser import message_parser
 from src.music_matching.musicbrainz_client import musicbrainz_client
 from src.music_matching.fuzzy_matcher import fuzzy_matcher
 from src.playlist_parser import playlist_parser
+from src.radiodj_integration.radiodj_client import radiodj_client
+from src.radiodj_integration.sync_service import sync_service
 
 # Database imports
 from config.database import SessionLocal
 from src.database.operations import ChatOperations, MessageOperations, SongOperations, RequestOperations
+from src.database.models import SongRequest
 
 # RadioDJ integration
-from src.integrations.radiodj_handler import send_to_radiodj, check_radiodj_library
+from src.integrations.radiodj_handler import check_radiodj_library
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -32,9 +35,8 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
-def save_to_database(chat_id, username, raw_text, results):
-    """Save song match to database."""
-    db = SessionLocal()
+def save_to_database(db, chat_id, username, raw_text, results):
+    """Save song matches and return created request/result pairs."""
     try:
         # Create or update chat record
         ChatOperations.create_or_update_chat(db, str(chat_id), f"Telegram: {chat_id}")
@@ -51,6 +53,8 @@ def save_to_database(chat_id, username, raw_text, results):
             timestamp=datetime.now(timezone.utc)
         )
         
+        created_requests = []
+
         # Save each match
         for result in results:
             # Create extraction record
@@ -58,7 +62,7 @@ def save_to_database(chat_id, username, raw_text, results):
                 db,
                 message_id=message.id,
                 original_phrase=raw_text,
-                confidence_score=result.get('confidence', 0) / 100.0,
+                confidence_score=result.get('confidence', 0),
                 extraction_method="telegram_bot"
             )
             
@@ -69,26 +73,25 @@ def save_to_database(chat_id, username, raw_text, results):
                 song_title=result.get('title', ''),
                 artist_name=result.get('artist'),
                 musicbrainz_id=result.get('musicbrainz_id'),
-                match_confidence=result.get('confidence', 0) / 100.0,
+                match_confidence=result.get('confidence', 0),
                 match_source="musicbrainz",
                 match_metadata={'raw_result': result}
             )
             
             # Create song request
-            RequestOperations.create_request(
+            request = RequestOperations.create_request(
                 db,
                 chat_id=str(chat_id),
                 matched_song_id=match.id,
                 requested_by=username
             )
+            created_requests.append({"result": result, "request": request})
         
         logger.info(f"💾 Saved {len(results)} match(es) to database")
-        return True
+        return created_requests
     except Exception as e:
         logger.error(f"Database error: {e}")
-        return False
-    finally:
-        db.close()
+        return []
 
 
 def get_updates(offset=None):
@@ -114,7 +117,12 @@ def send_message(chat_id, text, parse_mode="HTML"):
             "text": text,
             "parse_mode": parse_mode
         })
-        return response.json()
+        try:
+            data = response.json()
+        except Exception:
+            data = {'error': 'invalid json', 'text': text}
+        logger.info(f"Telegram sendMessage response: %s", data)
+        return data
     except Exception as e:
         logger.error(f"Error sending message: {e}")
         return None
@@ -281,7 +289,7 @@ def format_playlist_response(result):
     return response
 
 
-def format_response(results, radiodj_queued=None):
+def format_response(results, radiodj_queued=None, radiodj_found_not_queued=None, radiodj_queue_details=None):
     """Format song matches as a nice message."""
     if not results:
         return None
@@ -298,6 +306,17 @@ def format_response(results, radiodj_queued=None):
         # Check if queued to RadioDJ
         if radiodj_queued and match in radiodj_queued:
             response += f"📻 <b>Queued to RadioDJ!</b>\n"
+            queued_track = (radiodj_queue_details or {}).get(id(match))
+            if queued_track and (
+                queued_track.get('title') != match.get('title')
+                or queued_track.get('artist') != match.get('artist')
+            ):
+                response += (
+                    f"📀 RadioDJ track: {queued_track.get('artist', 'Unknown')}"
+                    f" - {queued_track.get('title', 'Unknown')}\n"
+                )
+        elif radiodj_found_not_queued and match in radiodj_found_not_queued:
+            response += f"📚 Found in RadioDJ library (queue unavailable)\n"
         elif radiodj_queued is not None:
             response += f"⚠️ Not found in RadioDJ library\n"
         
@@ -351,20 +370,52 @@ def main():
                 results = process_song_request(text)
                 
                 if results:
-                    # Save to database
-                    save_to_database(chat_id, username, text, results)
-                    
-                    # Try to queue in RadioDJ
-                    radiodj_queued = []
-                    for result in results:
-                        track = send_to_radiodj(result)
-                        if track:
-                            radiodj_queued.append(result)
+                    db = SessionLocal()
+                    try:
+                        persisted = save_to_database(db, chat_id, username, text, results)
+
+                        radiodj_queued = []
+                        radiodj_found_not_queued = []
+                        radiodj_queue_details = {}
+                        for item in persisted:
+                            result = item['result']
+                            request = item['request']
+
+                            RequestOperations.approve_request(db, request.id)
+                            request = db.query(SongRequest).filter(SongRequest.id == request.id).first()
+
+                            if request and sync_service.process_request(db, request):
+                                radiodj_queued.append(result)
+                                db.refresh(request)
+                                if request.radiodj_track_id:
+                                    queued_track = radiodj_client.get_track_by_id(request.radiodj_track_id)
+                                    if queued_track:
+                                        radiodj_queue_details[id(result)] = {
+                                            'title': queued_track.title,
+                                            'artist': queued_track.artist,
+                                        }
+                            elif check_radiodj_library(
+                                result.get('title', ''),
+                                result.get('artist', ''),
+                            ):
+                                radiodj_found_not_queued.append(result)
+                    finally:
+                        db.close()
                     
                     # Send reply with matches and RadioDJ status
-                    response = format_response(results, radiodj_queued)
+                    response = format_response(
+                        results,
+                        radiodj_queued,
+                        radiodj_found_not_queued,
+                        radiodj_queue_details,
+                    )
                     send_message(chat_id, response)
-                    logger.info(f"✅ Replied with {len(results)} match(es), {len(radiodj_queued)} queued to RadioDJ")
+                    logger.info(
+                        "✅ Replied with %s match(es), %s queued, %s found but not queued",
+                        len(results),
+                        len(radiodj_queued),
+                        len(radiodj_found_not_queued),
+                    )
                 else:
                     # No song match found - acknowledge the message
                     send_message(chat_id, "👋 Hey! I'm listening.\n\nTo request a song, say:\n• <i>Play [Song] by [Artist]</i>\n• Or paste a Spotify playlist link!")

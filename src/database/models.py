@@ -12,6 +12,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -134,9 +136,14 @@ class SongRequest(Base):
     request_priority = Column(Integer, default=1)
     status = Column(
         String(50), default="pending", index=True
-    )  # pending, approved, queued, played, rejected
+    )  # pending, approved, queue_pending, queue_failed_manual, queued, played, rejected
     radiodj_playlist_id = Column(Integer)
     radiodj_track_id = Column(Integer)
+    queue_attempt_count = Column(Integer, default=0)
+    next_queue_retry_at = Column(DateTime)
+    queue_terminal_failure = Column(Boolean, default=False)
+    last_queue_method = Column(String(50))
+    last_queue_error = Column(Text)
     scheduled_play_time = Column(DateTime)
     actual_play_time = Column(DateTime)
     play_count = Column(Integer, default=0)
@@ -151,11 +158,34 @@ class SongRequest(Base):
     # RELATIONSHIPS
     chat = relationship("WhatsAppChat", back_populates="song_requests")
     matched_song = relationship("MatchedSong", back_populates="requests")
+    queue_events = relationship(
+        "QueueProtocolEvent",
+        back_populates="request",
+        cascade=CASCADE_DELETE_ORPHAN,
+    )
+
+
+class QueueProtocolEvent(Base):
+    """Audit trail for queueing attempts and transitions."""
+
+    __tablename__ = "queue_protocol_events"
+
+    id = Column(Integer, primary_key=True)
+    request_id = Column(Integer, ForeignKey("song_requests.id"), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False, index=True)
+    method = Column(String(32))
+    attempt_number = Column(Integer, default=0)
+    error_message = Column(Text)
+    idempotency_token = Column(String(64), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    request = relationship("SongRequest", back_populates="queue_events")
 
 
 def init_database():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
+    _ensure_queue_protocol_schema()
     print("Database tables created successfully")
 
 
@@ -163,3 +193,28 @@ def drop_all_tables():
     """Drop all database tables (use with caution)."""
     Base.metadata.drop_all(bind=engine)
     print("All database tables dropped")
+
+
+def _ensure_queue_protocol_schema():
+    """Apply lightweight schema upgrades for queue protocol columns/tables."""
+    inspector = inspect(engine)
+
+    if "song_requests" in inspector.get_table_names():
+        existing_columns = {col["name"] for col in inspector.get_columns("song_requests")}
+        column_specs = {
+            "queue_attempt_count": "INTEGER DEFAULT 0",
+            "next_queue_retry_at": "DATETIME",
+            "queue_terminal_failure": "BOOLEAN DEFAULT 0",
+            "last_queue_method": "VARCHAR(50)",
+            "last_queue_error": "TEXT",
+        }
+
+        with engine.begin() as conn:
+            for col_name, col_type in column_specs.items():
+                if col_name not in existing_columns:
+                    conn.execute(
+                        text(f"ALTER TABLE song_requests ADD COLUMN {col_name} {col_type}")
+                    )
+
+    # Ensure new audit table exists.
+    Base.metadata.tables["queue_protocol_events"].create(bind=engine, checkfirst=True)

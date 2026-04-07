@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # BASE PATHS
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -47,9 +47,15 @@ DATABASE_CONFIG = {
     },
     'radiodj': {
         'db_path': os.getenv('RADIODJ_DB_PATH', ''),
+        'library_path': os.getenv('RADIODJ_LIBRARY_PATH', os.getenv('RADIODJ_DB_PATH', '')),
         'api_url': os.getenv('RADIODJ_API_URL', ''),
         'api_key': os.getenv('RADIODJ_API_KEY', ''),
         'default_playlist_id': int(os.getenv('RADIODJ_DEFAULT_PLAYLIST_ID', '1')),
+        'db_host': os.getenv('RADIODJ_DB_HOST', os.getenv('MARIADB_HOST', 'localhost')),
+        'db_port': int(os.getenv('RADIODJ_DB_PORT', '3306')),
+        'db_name': os.getenv('RADIODJ_DB_NAME', 'radiodj2'),
+        'db_username': os.getenv('RADIODJ_DB_USER', os.getenv('MARIADB_USERNAME', 'root')),
+        'db_password': os.getenv('RADIODJ_DB_PASS', ''),
     }
 }
 

@@ -29,6 +29,7 @@ EXPOSE 5000
 
 # SET ENVIRONMENT
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # RUN APPLICATION
-CMD ["python", "src/main.py"]
+CMD ["python", "-m", "src.main"]

@@ -19,6 +19,65 @@ class SyncService:
     def __init__(self):
         """Initialize sync service."""
         self.playlist_manager = playlist_manager
+        self.retry_delays_seconds = [60, 120, 240]
+
+    def process_request(self, db: Session, request) -> bool:
+        """Process a single approved request through the queue protocol."""
+        try:
+            matched_song = request.matched_song
+
+            artist = matched_song.artist_name or "Unknown"
+            title = matched_song.song_title
+
+            if getattr(request, "radiodj_track_id", None):
+                logger.info("Skipping already queued request %s", request.id)
+                return True
+
+            active_request = RequestOperations.start_queue_attempt(
+                db,
+                cast(int, request.id),
+                method="api_db",
+            )
+            if not active_request:
+                return False
+
+            track_id = self.playlist_manager.add_song_to_playlist(
+                artist=artist,
+                title=title,
+                use_api=True,
+            )
+
+            if track_id is not None:
+                track_id_int = int(track_id) if track_id > 0 else None
+                RequestOperations.mark_queue_success(
+                    db,
+                    cast(int, request.id),
+                    method="api_db",
+                    radiodj_track_id=track_id_int,
+                )
+                logger.info("Synced request %s: %s - %s", request.id, artist, title)
+                return True
+
+            RequestOperations.record_queue_failure(
+                db,
+                cast(int, request.id),
+                error_message="queue_add_failed",
+                method="api_db",
+                retry_delays_seconds=self.retry_delays_seconds,
+            )
+            logger.warning("Failed to sync request %s: %s - %s", request.id, artist, title)
+            return False
+
+        except (SQLAlchemyError, ValueError, RuntimeError) as exc:
+            RequestOperations.record_queue_failure(
+                db,
+                cast(int, request.id),
+                error_message=str(exc),
+                method="api_db",
+                retry_delays_seconds=self.retry_delays_seconds,
+            )
+            logger.error("Error syncing request %s: %s", request.id, exc)
+            return False
 
     def sync_approved_requests(self, db: Session, limit: int = 50) -> Dict[str, int]:
         """Sync approved requests to RadioDJ.
@@ -32,11 +91,7 @@ class SyncService:
         """
         logger.info("Starting sync of approved requests to RadioDJ")
 
-        # Get pending approved requests
-        requests = RequestOperations.get_pending_requests(db, limit)
-
-        # Filter for approved status
-        approved_requests = [r for r in requests if getattr(r, "status", None) == "approved"]
+        approved_requests = RequestOperations.get_queue_candidates(db, limit)
 
         if not approved_requests:
             logger.info("No approved requests to sync")
@@ -45,37 +100,10 @@ class SyncService:
         stats = {"synced": 0, "failed": 0}
 
         for request in approved_requests:
-            try:
-                # Get matched song details
-                matched_song = request.matched_song
-
-                artist = matched_song.artist_name or "Unknown"
-                title = matched_song.song_title
-
-                # Add to RadioDJ
-                track_id = self.playlist_manager.add_song_to_playlist(
-                    artist=artist, title=title, use_api=True
-                )
-
-                if track_id is not None:
-                    request_id_int = cast(int, request.id)
-                    track_id_int = int(track_id) if track_id > 0 else None
-
-                    # Mark as queued (omit track id when not available)
-                    if track_id_int is not None:
-                        RequestOperations.mark_queued(db, request_id_int, track_id_int)
-                    else:
-                        RequestOperations.mark_queued(db, request_id_int)
-                    stats["synced"] += 1
-                    logger.info("Synced request %s: %s - %s", request.id, artist, title)
-                else:
-                    stats["failed"] += 1
-                    logger.warning("Failed to sync request %s: %s - %s", request.id, artist, title)
-
-            except (SQLAlchemyError, ValueError, RuntimeError) as exc:
-                logger.error("Error syncing request %s: %s", request.id, exc)
+            if self.process_request(db, request):
+                stats["synced"] += 1
+            else:
                 stats["failed"] += 1
-                continue
 
         logger.info("Sync completed: %s", stats)
         return stats

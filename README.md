@@ -31,7 +31,7 @@ The easiest way to use this project is via the Telegram bot. Send song requests 
    ```powershell
    cd whatsapp-song-scanner
    .\.venv\Scripts\Activate.ps1
-   python src/telegram_bot.py
+  python -m src.telegram_bot
    ```
 
 ### Usage
@@ -296,6 +296,7 @@ pytest -v --cov=src --cov-report=html
 
 # Run specific test file
 pytest tests/unit/test_text_processing.py -v
+pytest tests/unit/test_jamendo_to_radiodj.py -v
 
 # Run with coverage report
 pytest --cov=src --cov-report=term-missing
@@ -538,6 +539,7 @@ pytest -v
 
 # Run specific test suite
 pytest tests/unit/test_text_processing.py -v
+pytest tests/unit/test_jamendo_to_radiodj.py -v
 pytest tests/integration/test_whatsapp_integration.py -v
 
 # Run with coverage
@@ -640,7 +642,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
 
 # Run locally
-python src/main.py
+python -m src.main
 ```
 
 ### Code Quality

@@ -119,7 +119,13 @@ curl http://localhost:5000/api/v1/requests/pending
 # Test approval
 curl -X POST http://localhost:5000/api/v1/requests/approve \
   -H "Content-Type: application/json" \
-  -d '{"id": 1}'
+   -d '{"request_id": 1}'
+```
+
+### **Run Focused Regression Test**
+```powershell
+# From the repo root, with the virtual environment active
+pytest tests/unit/test_jamendo_to_radiodj.py -v
 ```
 
 ---
@@ -131,17 +137,16 @@ curl -X POST http://localhost:5000/api/v1/requests/approve \
 # Activate virtual environment
 .\.venv\Scripts\Activate.ps1
 
-# Set Python path and start bot (with logging)
-$env:PYTHONPATH = "."
-Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "src/telegram_bot.py" -RedirectStandardOutput "bot_out.log" -RedirectStandardError "bot_err.log" -NoNewWindow
+# Start bot in background with logs
+Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "-m", "src.telegram_bot" -RedirectStandardOutput "bot_out.log" -RedirectStandardError "bot_err.log" -NoNewWindow
 
 # Or run in foreground (see output directly)
-$env:PYTHONPATH = "."; .\.venv\Scripts\python.exe src/telegram_bot.py
+.\.venv\Scripts\python.exe -m src.telegram_bot
 ```
 
 ### **Start Flask API Server**
 ```powershell
-$env:PYTHONPATH = "."; .\.venv\Scripts\python.exe src/main.py
+.\.venv\Scripts\python.exe -m src.main
 ```
 
 ### **Monitor Bot Logs**

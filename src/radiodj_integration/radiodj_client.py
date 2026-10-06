@@ -473,9 +473,10 @@ class RadioDJClient:
         """
         status = {"api_available": False, "database_available": False, "filesystem_available": False}
 
-        # Check API
+        # Check API — only /opt works on this plugin version
         if self.api_url:
             api_checks = (
+                lambda: self._api_get_text("opt", {"command": "Status"}) is not None,
                 lambda: self._api_get_json("npjson") is not None,
                 lambda: self._api_get_text("p") is not None,
                 lambda: self._api_get_json("Status") is not None,

@@ -13,6 +13,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MARIADB_HOST=mariadb
       - REDIS_HOST=redis
+      - PYTHONPATH=/app
     volumes:
       - ../data:/app/data
       - ../config:/app/config:ro
@@ -36,6 +37,8 @@ services:
     image: mariadb:10.11
     container_name: scanner-mariadb
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
       MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-changeme}
       MYSQL_DATABASE: ${MARIADB_DATABASE:-song_scanner}

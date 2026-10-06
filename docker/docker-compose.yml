@@ -28,8 +28,8 @@ services:
       - scanner-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 120s
+      timeout: 60s
       retries: 3
 
   # MARIADB DATABASE

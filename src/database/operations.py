@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import desc, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.database.models import (
@@ -28,8 +28,8 @@ class ChatOperations:
         chat = db.query(WhatsAppChat).filter(WhatsAppChat.chat_id == chat_id).first()
         if chat:
             if chat_name:
-                chat.chat_name = chat_name  # type: ignore[assignment]
-            chat.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+                chat.chat_name = chat_name
+            chat.updated_at = datetime.now(timezone.utc)
         else:
             chat = WhatsAppChat(chat_id=chat_id, chat_name=chat_name)
             db.add(chat)
@@ -47,9 +47,9 @@ class ChatOperations:
         """Update last scan timestamp for a chat."""
         chat = db.query(WhatsAppChat).filter(WhatsAppChat.chat_id == chat_id).first()
         if chat:
-            chat.last_scan_time = datetime.now(timezone.utc)  # type: ignore[assignment]
+            chat.last_scan_time = datetime.now(timezone.utc)
             if message_id:
-                chat.last_message_id = message_id  # type: ignore[assignment]
+                chat.last_message_id = message_id
             db.commit()
 
 
@@ -96,9 +96,9 @@ class MessageOperations:
         """Mark message as processed."""
         message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
         if message:
-            message.is_processed = True  # type: ignore[assignment]
+            message.is_processed = True
             if cleaned_text:
-                message.cleaned_text = cleaned_text  # type: ignore[assignment]
+                message.cleaned_text = cleaned_text
             db.commit()
 
     @staticmethod
@@ -106,8 +106,8 @@ class MessageOperations:
         """Record processing error."""
         message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
         if message:
-            message.processing_attempts += 1  # type: ignore[assignment]
-            message.processing_error = error  # type: ignore[assignment]
+            message.processing_attempts = (message.processing_attempts or 0) + 1
+            message.processing_error = error
             db.commit()
 
 
@@ -167,8 +167,8 @@ class SongOperations:
         """Mark match as verified."""
         match = db.query(MatchedSong).filter(MatchedSong.id == match_id).first()
         if match:
-            match.is_verified = True  # type: ignore[assignment]
-            match.verification_method = method  # type: ignore[assignment]
+            match.is_verified = True
+            match.verification_method = method
             db.commit()
 
 
@@ -197,7 +197,7 @@ class RequestOperations:
         return (
             db.query(SongRequest)
             .filter(SongRequest.status == "pending")
-            .order_by(desc(SongRequest.request_priority), SongRequest.created_at)
+            .order_by(SongRequest.request_priority.desc(), SongRequest.created_at)
             .limit(limit)
             .all()
         )
@@ -212,7 +212,7 @@ class RequestOperations:
         query = db.query(SongRequest)
         if status:
             query = query.filter(SongRequest.status == status)
-        return query.order_by(desc(SongRequest.id)).limit(limit).all()
+        return query.order_by(SongRequest.id.desc()).limit(limit).all()
 
     @staticmethod
     def get_request_events(
@@ -224,7 +224,7 @@ class RequestOperations:
         return (
             db.query(QueueProtocolEvent)
             .filter(QueueProtocolEvent.request_id == request_id)
-            .order_by(desc(QueueProtocolEvent.id))
+            .order_by(QueueProtocolEvent.id.desc())
             .limit(limit)
             .all()
         )
@@ -244,7 +244,7 @@ class RequestOperations:
                     SongRequest.next_queue_retry_at <= now,
                 )
             )
-            .order_by(desc(SongRequest.request_priority), SongRequest.created_at)
+            .order_by(SongRequest.request_priority.desc(), SongRequest.created_at)
             .limit(limit)
             .all()
         )
@@ -254,11 +254,11 @@ class RequestOperations:
         """Approve a request."""
         request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
         if request:
-            request.status = "approved"  # type: ignore[assignment]
-            request.next_queue_retry_at = None  # type: ignore[assignment]
-            request.queue_terminal_failure = False  # type: ignore[assignment]
-            request.last_queue_error = None  # type: ignore[assignment]
-            request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            request.status = "approved"
+            request.next_queue_retry_at = None
+            request.queue_terminal_failure = False
+            request.last_queue_error = None
+            request.updated_at = datetime.now(timezone.utc)
             db.commit()
 
     @staticmethod
@@ -266,10 +266,10 @@ class RequestOperations:
         """Reject a request."""
         request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
         if request:
-            request.status = "rejected"  # type: ignore[assignment]
+            request.status = "rejected"
             if notes:
-                request.notes = notes  # type: ignore[assignment]
-            request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+                request.notes = notes
+            request.updated_at = datetime.now(timezone.utc)
             db.commit()
 
     @staticmethod
@@ -277,13 +277,13 @@ class RequestOperations:
         """Mark request as queued in RadioDJ."""
         request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
         if request:
-            request.status = "queued"  # type: ignore[assignment]
+            request.status = "queued"
             if radiodj_track_id:
-                request.radiodj_track_id = radiodj_track_id  # type: ignore[assignment]
-            request.next_queue_retry_at = None  # type: ignore[assignment]
-            request.queue_terminal_failure = False  # type: ignore[assignment]
-            request.last_queue_error = None  # type: ignore[assignment]
-            request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+                request.radiodj_track_id = radiodj_track_id
+            request.next_queue_retry_at = None
+            request.queue_terminal_failure = False
+            request.last_queue_error = None
+            request.updated_at = datetime.now(timezone.utc)
             db.commit()
 
     @staticmethod
@@ -297,17 +297,17 @@ class RequestOperations:
         if not request:
             return None
 
-        request.status = "queue_pending"  # type: ignore[assignment]
-        request.queue_attempt_count = (request.queue_attempt_count or 0) + 1  # type: ignore[assignment]
-        request.last_queue_method = method  # type: ignore[assignment]
-        request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        request.status = "queue_pending"
+        request.queue_attempt_count = (request.queue_attempt_count or 0) + 1
+        request.last_queue_method = method
+        request.updated_at = datetime.now(timezone.utc)
         token = uuid4().hex
         RequestOperations._append_queue_event(
             db,
             request=request,
             event_type="attempt_started",
             method=method,
-            attempt_number=request.queue_attempt_count or 0,  # type: ignore[arg-type]
+            attempt_number=request.queue_attempt_count or 0,
             idempotency_token=token,
         )
         db.commit()
@@ -326,20 +326,20 @@ class RequestOperations:
         if not request:
             return None
 
-        request.status = "queued"  # type: ignore[assignment]
+        request.status = "queued"
         if radiodj_track_id:
-            request.radiodj_track_id = radiodj_track_id  # type: ignore[assignment]
-        request.next_queue_retry_at = None  # type: ignore[assignment]
-        request.queue_terminal_failure = False  # type: ignore[assignment]
-        request.last_queue_method = method  # type: ignore[assignment]
-        request.last_queue_error = None  # type: ignore[assignment]
-        request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            request.radiodj_track_id = radiodj_track_id
+        request.next_queue_retry_at = None
+        request.queue_terminal_failure = False
+        request.last_queue_method = method
+        request.last_queue_error = None
+        request.updated_at = datetime.now(timezone.utc)
         RequestOperations._append_queue_event(
             db,
             request=request,
             event_type="attempt_succeeded",
             method=method,
-            attempt_number=request.queue_attempt_count or 0,  # type: ignore[arg-type]
+            attempt_number=request.queue_attempt_count or 0,
             idempotency_token=uuid4().hex,
         )
         db.commit()
@@ -360,10 +360,10 @@ class RequestOperations:
             return None
 
         retry_delays_seconds = retry_delays_seconds or [60, 120, 240]
-        attempt_number: int = request.queue_attempt_count or 0  # type: ignore[assignment]
-        request.last_queue_method = method  # type: ignore[assignment]
-        request.last_queue_error = error_message  # type: ignore[assignment]
-        request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        attempt_number: int = request.queue_attempt_count or 0
+        request.last_queue_method = method
+        request.last_queue_error = error_message
+        request.updated_at = datetime.now(timezone.utc)
 
         RequestOperations._append_queue_event(
             db,
@@ -378,8 +378,8 @@ class RequestOperations:
         retry_index = max(attempt_number - 1, 0)
         if retry_index < len(retry_delays_seconds):
             retry_delay = retry_delays_seconds[retry_index]
-            request.status = "approved"  # type: ignore[assignment]
-            request.next_queue_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)  # type: ignore[assignment]
+            request.status = "approved"
+            request.next_queue_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
             RequestOperations._append_queue_event(
                 db,
                 request=request,
@@ -390,9 +390,9 @@ class RequestOperations:
                 idempotency_token=uuid4().hex,
             )
         else:
-            request.status = "queue_failed_manual"  # type: ignore[assignment]
-            request.queue_terminal_failure = True  # type: ignore[assignment]
-            request.next_queue_retry_at = None  # type: ignore[assignment]
+            request.status = "queue_failed_manual"
+            request.queue_terminal_failure = True
+            request.next_queue_retry_at = None
             RequestOperations._append_queue_event(
                 db,
                 request=request,
@@ -416,14 +416,14 @@ class RequestOperations:
         if not request:
             return None
 
-        request.status = "approved"  # type: ignore[assignment]
-        request.queue_attempt_count = 0  # type: ignore[assignment]
-        request.next_queue_retry_at = None  # type: ignore[assignment]
-        request.queue_terminal_failure = False  # type: ignore[assignment]
-        request.last_queue_error = None  # type: ignore[assignment]
-        request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+        request.status = "approved"
+        request.queue_attempt_count = 0
+        request.next_queue_retry_at = None
+        request.queue_terminal_failure = False
+        request.last_queue_error = None
+        request.updated_at = datetime.now(timezone.utc)
         if note:
-            request.notes = note  # type: ignore[assignment]
+            request.notes = note
 
         RequestOperations._append_queue_event(
             db,
@@ -465,8 +465,8 @@ class RequestOperations:
         """Mark request as played."""
         request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
         if request:
-            request.status = "played"  # type: ignore[assignment]
-            request.actual_play_time = datetime.now(timezone.utc)  # type: ignore[assignment]
-            request.play_count += 1  # type: ignore[assignment]
-            request.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+            request.status = "played"
+            request.actual_play_time = datetime.now(timezone.utc)
+            request.play_count = (request.play_count or 0) + 1
+            request.updated_at = datetime.now(timezone.utc)
             db.commit()

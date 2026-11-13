@@ -81,7 +81,7 @@ def sync_radiodj_library() -> Dict[str, Any]:
         for match in matches:
             try:
                 track = _find_track(
-                    match.song_title or "", match.artist_name or ""  # type: ignore[arg-type]
+                    match.song_title or "", match.artist_name or ""
                 )
                 if track:
                     stats["found_in_radiodj"] += 1
@@ -167,12 +167,12 @@ def process_pending_requests() -> Dict[str, Any]:
                 )
 
                 if track:
-                    request.status = "queued"  # type: ignore[assignment]
-                    request.radiodj_track_id = track.id  # type: ignore[assignment]
+                    request.status = "queued"
+                    request.radiodj_track_id = track.id
                     stats["queued"] += 1
                     logger.info("Queued: %s by %s", match.song_title, match.artist_name)
                 else:
-                    request.status = "not_found"  # type: ignore[assignment]
+                    request.status = "not_found"
                     stats["not_found"] += 1
                     logger.info("Not in library: %s by %s", match.song_title, match.artist_name)
             except Exception as exc:

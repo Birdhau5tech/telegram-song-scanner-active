@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from src.database.models import (
@@ -239,8 +239,10 @@ class RequestOperations:
             .filter(SongRequest.queue_terminal_failure.is_(False))
             .filter(SongRequest.radiodj_track_id.is_(None))
             .filter(
-                (SongRequest.next_queue_retry_at.is_(None))
-                | (SongRequest.next_queue_retry_at <= now)
+                or_(
+                    SongRequest.next_queue_retry_at.is_(None),
+                    SongRequest.next_queue_retry_at <= now,
+                )
             )
             .order_by(desc(SongRequest.request_priority), SongRequest.created_at)
             .limit(limit)

@@ -104,7 +104,7 @@ class RadioDJClient:
                 timeout=10,
             )
             response.raise_for_status()
-            return response.text
+            return str(response.text)
         except requests.RequestException as exc:
             logger.debug("RadioDJ text endpoint %s unavailable: %s", endpoint, exc)
             return None

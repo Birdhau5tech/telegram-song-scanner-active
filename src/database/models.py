@@ -1,6 +1,7 @@
 """Database models for WhatsApp Song Scanner."""
 
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import (
     JSON,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     inspect,
     text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config.database import Base, engine
 
@@ -140,7 +141,7 @@ class SongRequest(Base):
     radiodj_playlist_id = Column(Integer)
     radiodj_track_id = Column(Integer)
     queue_attempt_count = Column(Integer, default=0)
-    next_queue_retry_at = Column(DateTime)
+    next_queue_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     queue_terminal_failure = Column(Boolean, default=False)
     last_queue_method = Column(String(50))
     last_queue_error = Column(Text)

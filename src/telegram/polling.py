@@ -149,9 +149,7 @@ class TelegramPoller:
                 )
 
                 # Match the song
-                match_result = matching_orchestrator.match_song(
-                    db, extraction.id, title, artist
-                )
+                match_result = matching_orchestrator.match_song(db, extraction.id, title, artist)
 
                 if not match_result:
                     results.append(f"❌ '{title}' by {artist or 'Unknown'} - No match found")

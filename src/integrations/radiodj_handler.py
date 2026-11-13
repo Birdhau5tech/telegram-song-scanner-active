@@ -80,9 +80,7 @@ def sync_radiodj_library() -> Dict[str, Any]:
 
         for match in matches:
             try:
-                track = _find_track(
-                    match.song_title or "", match.artist_name or ""
-                )
+                track = _find_track(match.song_title or "", match.artist_name or "")
                 if track:
                     stats["found_in_radiodj"] += 1
                     _save_track_mapping(db, match.musicbrainz_id, track)  # type: ignore[arg-type]

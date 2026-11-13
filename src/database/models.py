@@ -34,7 +34,9 @@ class WhatsAppChat(Base):
     last_scan_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[Optional[bool]] = mapped_column(Boolean, default=True, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True,
     )
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
@@ -44,7 +46,9 @@ class WhatsAppChat(Base):
 
     # RELATIONSHIPS
     messages: Mapped[List["ChatMessage"]] = relationship(
-        "ChatMessage", back_populates="chat", cascade=CASCADE_DELETE_ORPHAN,
+        "ChatMessage",
+        back_populates="chat",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
     song_requests: Mapped[List["SongRequest"]] = relationship(
         "SongRequest", back_populates="chat", cascade=CASCADE_DELETE_ORPHAN
@@ -59,7 +63,9 @@ class ChatMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     message_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     chat_id: Mapped[str] = mapped_column(
-        String(255), ForeignKey("whatsapp_chats.chat_id"), nullable=False,
+        String(255),
+        ForeignKey("whatsapp_chats.chat_id"),
+        nullable=False,
     )
     sender_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sender_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -70,7 +76,9 @@ class ChatMessage(Base):
     processing_attempts: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     processing_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True,
     )
 
     # RELATIONSHIPS
@@ -93,7 +101,9 @@ class ExtractedSong(Base):
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     extraction_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True,
     )
 
     # RELATIONSHIPS
@@ -112,7 +122,9 @@ class MatchedSong(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     extraction_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("extracted_songs.id"), nullable=False,
+        Integer,
+        ForeignKey("extracted_songs.id"),
+        nullable=False,
     )
     song_title: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     artist_name: Mapped[Optional[str]] = mapped_column(String(500), index=True, nullable=True)
@@ -126,12 +138,15 @@ class MatchedSong(Base):
     is_verified: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
     verification_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True,
     )
 
     # RELATIONSHIPS
     extraction: Mapped["ExtractedSong"] = relationship(
-        "ExtractedSong", back_populates="matched_results",
+        "ExtractedSong",
+        back_populates="matched_results",
     )
     requests: Mapped[List["SongRequest"]] = relationship(
         "SongRequest",
@@ -147,10 +162,14 @@ class SongRequest(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     chat_id: Mapped[str] = mapped_column(
-        String(255), ForeignKey("whatsapp_chats.chat_id"), nullable=False,
+        String(255),
+        ForeignKey("whatsapp_chats.chat_id"),
+        nullable=False,
     )
     matched_song_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("matched_songs.id"), nullable=False,
+        Integer,
+        ForeignKey("matched_songs.id"),
+        nullable=False,
     )
     requested_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     request_priority: Mapped[Optional[int]] = mapped_column(Integer, default=1, nullable=True)
@@ -162,7 +181,9 @@ class SongRequest(Base):
     queue_attempt_count: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     next_queue_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     queue_terminal_failure: Mapped[Optional[bool]] = mapped_column(
-        Boolean, default=False, nullable=True,
+        Boolean,
+        default=False,
+        nullable=True,
     )
     last_queue_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     last_queue_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -171,7 +192,10 @@ class SongRequest(Base):
     play_count: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+        nullable=True,
     )
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
@@ -196,7 +220,10 @@ class QueueProtocolEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     request_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("song_requests.id"), nullable=False, index=True,
+        Integer,
+        ForeignKey("song_requests.id"),
+        nullable=False,
+        index=True,
     )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -204,7 +231,10 @@ class QueueProtocolEvent(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     idempotency_token: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=True,
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+        nullable=True,
     )
 
     request: Mapped["SongRequest"] = relationship("SongRequest", back_populates="queue_events")

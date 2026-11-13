@@ -379,7 +379,9 @@ class RequestOperations:
         if retry_index < len(retry_delays_seconds):
             retry_delay = retry_delays_seconds[retry_index]
             request.status = "approved"
-            request.next_queue_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_delay)
+            request.next_queue_retry_at = datetime.now(timezone.utc) + timedelta(
+                seconds=retry_delay
+            )
             RequestOperations._append_queue_event(
                 db,
                 request=request,

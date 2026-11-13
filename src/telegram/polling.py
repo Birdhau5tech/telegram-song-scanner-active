@@ -142,16 +142,14 @@ class TelegramPoller:
                 # Create extraction record
                 extraction = SongOperations.create_extraction(
                     db=db,
-                    message_id=db_message.id,  # type: ignore[arg-type]
+                    message_id=db_message.id,
                     original_phrase=candidate.get("original_phrase", f"{title} - {artist}"),
                     confidence_score=candidate.get("confidence", 80.0),
                     extraction_method=candidate.get("extraction_method", "parser"),
                 )
 
                 # Match the song
-                match_result = matching_orchestrator.match_song(
-                    db, extraction.id, title, artist  # type: ignore[arg-type]
-                )
+                match_result = matching_orchestrator.match_song(db, extraction.id, title, artist)
 
                 if not match_result:
                     results.append(f"❌ '{title}' by {artist or 'Unknown'} - No match found")
@@ -173,7 +171,7 @@ class TelegramPoller:
 
                 # Auto-approve high confidence matches
                 if is_verified:
-                    RequestOperations.approve_request(db, request.id)  # type: ignore[arg-type]
+                    RequestOperations.approve_request(db, request.id)
 
                     # Immediately try to add to RadioDJ
                     track_id = playlist_manager.add_song_to_playlist(
@@ -182,7 +180,7 @@ class TelegramPoller:
 
                     if track_id is not None:
                         RequestOperations.mark_queued(
-                            db, request.id, track_id if track_id > 0 else None  # type: ignore[arg-type]
+                            db, request.id, track_id if track_id > 0 else None
                         )
                         results.append(
                             f"✅ '{matched_title}' by {matched_artist}\n   📻 Added to RadioDJ queue!"
@@ -197,7 +195,7 @@ class TelegramPoller:
                     )
 
             # Mark message as processed
-            MessageOperations.mark_processed(db, db_message.id, cleaned)  # type: ignore[arg-type]
+            MessageOperations.mark_processed(db, db_message.id, cleaned)
 
             # Send reply
             reply = "🎵 Song Request Results:\n\n" + "\n\n".join(results)

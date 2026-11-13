@@ -181,7 +181,7 @@ def get_request_events(request_id: int):
                         "attempt_number": event.attempt_number,
                         "error_message": event.error_message,
                         "idempotency_token": event.idempotency_token,
-                        "created_at": event.created_at.isoformat(),
+                        "created_at": event.created_at.isoformat() if event.created_at else None,
                     }
                 )
             return jsonify({"events": results, "count": len(results)}), 200
